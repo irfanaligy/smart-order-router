@@ -72,7 +72,7 @@ import GeniusYield.OrderBot.OrderBook (
   sellOrders,
   withEachAsset,
  )
-import GeniusYield.OrderBot.Types (OrderInfo (..), OrderAssetPair (..), getOracleCertificate, extractPriceFromCert)
+import GeniusYield.OrderBot.Types (OrderAssetPair (..), OrderInfo (..), extractPriceFromCert, getOracleCertificate)
 import GeniusYield.Providers.Common (SubmitTxException)
 import GeniusYield.Transaction (GYCoinSelectionStrategy (GYLegacy))
 import GeniusYield.TxBuilder (
@@ -90,6 +90,7 @@ import GeniusYield.Types
 -- import qualified Maestro.Client.V1 as Maestro
 import qualified Maestro.Types.V1 as Maestro
 import System.Exit (exitSuccess)
+
 -- import Web.HttpApiData (ToHttpApiData (..))
 -- import GeniusYield.Scripts (GYCompiledScripts, readCompiledScripts)
 -- import GeniusYield.Scripts (GYCompiledScripts)
@@ -110,43 +111,48 @@ data OrderBot = OrderBot
   , botStakeAddress :: !(Maybe GYStakeAddressBech32)
   -- ^ Optional bech32 encoded stake address.
   , botCollateral :: !(Maybe (GYTxOutRef, Bool))
-  -- ^ UTxO ref of the collateral UTxO in the bot's wallet.
-  --
-  --          NOTE: If collateral is Nothing, then Atlas will choose some UTxO to
-  --          function as collateral. If a TxOutRef is given, the bool indicates whether
-  --          the collateral can be spent in the tx.
+  {- ^ UTxO ref of the collateral UTxO in the bot's wallet.
+
+         NOTE: If collateral is Nothing, then Atlas will choose some UTxO to
+         function as collateral. If a TxOutRef is given, the bool indicates whether
+         the collateral can be spent in the tx.
+  -}
   , botExecutionStrat :: !ExecutionStrategy
   -- ^ The execution strategy, which includes and governs the matching strategy.
   , botAssetPairFilter :: [OrderAssetPair]
-  -- ^ List that can be used to filter out uninteresting orders/pools.
-  --          The multiasset order book is created only with the existing pairs on
-  --          the list.
+  {- ^ List that can be used to filter out uninteresting orders/pools.
+         The multiasset order book is created only with the existing pairs on
+         the list.
+  -}
   , botRescanDelay :: Int
-  -- ^ How many microseconds to wait after a tx submission before rescanning
-  --          the chain for orders.
+  {- ^ How many microseconds to wait after a tx submission before rescanning
+         the chain for orders.
+  -}
   , botTakeMatches :: [MatchResult] -> IO [MatchResult]
-  -- ^ How and how many matching results do the bot takes to build, sign and
-  --          submit every iteration.
+  {- ^ How and how many matching results do the bot takes to build, sign and
+         submit every iteration.
+  -}
   , botLovelaceWarningThreshold :: Maybe Natural
   -- ^ See 'botCLovelaceWarningThreshold'.
   , botTokenInfos :: Map GYAssetClass AssetInfo
   }
 
--- | Currently, we only have the parallel execution strategy: @MultiAssetTraverse@,
--- where each order book for each unique asset pair (see: "GeniusYield.OrderBot.Types.equivalentAssetPair")
--- is processed independently.
+{- | Currently, we only have the parallel execution strategy: @MultiAssetTraverse@,
+where each order book for each unique asset pair (see: "GeniusYield.OrderBot.Types.equivalentAssetPair")
+is processed independently.
+-}
 newtype ExecutionStrategy = MultiAssetTraverse IndependentStrategy
 
 sorNS :: GYLogNamespace
 sorNS = "SOR"
 
 runOrderBot ::
+  -- | Path to the config file for the GY framework.
   GYCoreConfig ->
-  -- ^ Path to the config file for the GY framework.
+  -- | Complete DEX information.
   DEXInfo ->
-  -- ^ Complete DEX information.
+  -- | OrderBot configuration.
   OrderBot ->
-  -- ^ OrderBot configuration.
   IO ()
 runOrderBot
   cfg
@@ -235,7 +241,7 @@ runOrderBot
               , jsonPrint $ M.toList $ matchingsPerOrderAssetPair botAssetPairFilter matchesFound
               ]
 
-          -- | This part builds and submits the transactions from the returned matches.
+          -- \| This part builds and submits the transactions from the returned matches.
           -- This part has the highest chances of throwing exceptions, as it's extremely
           -- stateful. The user provided exception handler is used to wrap this flow.
           unless (all null matchesFound) $ do
@@ -360,8 +366,8 @@ buildTransactions
 
     resultToSkeleton :: MatchResult -> GYTxBuilderMonadIO (GYTxSkeleton 'PlutusV3)
     resultToSkeleton mResult = flip runReaderT (dexScripts dexinfo) $ do
-        refTWOCD <- runReaderT (fetchTwoWayOrderConfig (tworRefNft (dexTWORefs dexinfo))) (dexScripts dexinfo)
-        executionSkeleton (dexTWORefs dexinfo, dexPORefs dexinfo) (head botAddrs) refTWOCD mResult
+      refTWOCD <- runReaderT (fetchTwoWayOrderConfig (tworRefNft (dexTWORefs dexinfo))) (dexScripts dexinfo)
+      executionSkeleton (dexTWORefs dexinfo, dexPORefs dexinfo) (head botAddrs) refTWOCD mResult
 
     handlerBuildTx :: GYTxMonadException -> IO [(GYTxBody, MatchResult)]
     handlerBuildTx ex =
@@ -405,11 +411,11 @@ notLosingTokensCheck netId providers botAddrs oapFilter assetInfos (txBody, matc
         let tokensWithInfos = M.restrictKeys assetInfos (M.keysSet nonAdaTokenArbitrage)
         logDebug $ "TokensWithInfos: " ++ show tokensWithInfos
         accLovelace <- do
-          priceInfos <- 
-              foldlM'
-                (\a (ac, _) -> getLovelacePriceOfAsset ac >>= \res -> pure $! M.insert ac res a)
-                (M.empty :: Map GYAssetClass (Maybe Rational))
-                $ M.toList tokensWithInfos
+          priceInfos <-
+            foldlM'
+              (\a (ac, _) -> getLovelacePriceOfAsset ac >>= \res -> pure $! M.insert ac res a)
+              (M.empty :: Map GYAssetClass (Maybe Rational))
+              $ M.toList tokensWithInfos
           logDebug $ "PriceInfos: " ++ show priceInfos
           foldlM'
             ( \accLovelace (ac, amt) -> do
@@ -513,7 +519,7 @@ foldlM' f = foldlM (\ !acc -> f acc)
 
 getLovelacePriceOfAsset :: GYAssetClass -> IO (Maybe Rational)
 getLovelacePriceOfAsset ac = do
-    mCert <- getOracleCertificate (ac, GYLovelace)
-    case mCert of
-      Nothing   -> pure Nothing
-      Just cert -> pure (Just (extractPriceFromCert cert))
+  mCert <- getOracleCertificate (ac, GYLovelace)
+  case mCert of
+    Nothing -> pure Nothing
+    Just cert -> pure (Just (extractPriceFromCert cert))

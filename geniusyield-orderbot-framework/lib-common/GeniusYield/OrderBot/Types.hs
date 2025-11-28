@@ -27,110 +27,110 @@ module GeniusYield.OrderBot.Types (
   completeFill,
   partialFill,
   getOracleCertificate,
-  extractPriceFromCert
+  extractPriceFromCert,
 ) where
 
 import Data.Aeson (ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import Data.Kind (Type)
+import Data.Maybe (fromJust)
 import Data.Ratio (denominator, numerator, (%))
 import Data.Text (Text)
-import Numeric.Natural (Natural)
-import Data.Maybe (fromJust)
-
 import GeniusYield.Api.DEX.PartialOrder (PartialOrderInfo (..))
-import GeniusYield.Api.DEX.TwoWayOrder
-  ( TwoWayOrderInfo (..)
-  , OrderAssets (..)
-  , OrderPrices (..)
-  , PriceDelta (..)
-  , PriceVal (..)
-  , TWFillDirection (..)
-  , extractOrderAssets
-  , extractOrderPrices
-  )
+import GeniusYield.Api.DEX.TwoWayOrder (
+  OrderAssets (..),
+  OrderPrices (..),
+  PriceDelta (..),
+  PriceVal (..),
+  TWFillDirection (..),
+  TwoWayOrderInfo (..),
+  extractOrderAssets,
+  extractOrderPrices,
+ )
+import GeniusYield.OrderBot.Oracle (OracleCertificate (..), Price (..), extractPriceFromCert, getOracleCertificate)
 import GeniusYield.Types (rationalToGHC)
 import GeniusYield.Types.Value (GYAssetClass (..))
-
-import GeniusYield.OrderBot.Oracle (Price (..), OracleCertificate (..), getOracleCertificate, extractPriceFromCert)
+import Numeric.Natural (Natural)
 
 -------------------------------------------------------------------------------
 -- Information on DEX orders relevant to a matching strategy
 -------------------------------------------------------------------------------
 
--- | For each unique 'OrderAssetPair' (see: 'equivalentAssetPair'): there are 2
--- 'OrderInfo' types: 'OrderInfo BuyOrder', and 'OrderInfo SellOrder'.
--- 
--- For a buy order, the volume indicates the amount of 'commodityAsset' being bought.
--- Whereas the price indicates the requested price, in 'currencyAsset', of each
--- 'commodityAsset' being bought.
--- 
--- For a sell order, the volume indicates the amount of 'commodityAsset' being sold.
--- Whereas the price indicates the requested price, in 'currencyAsset', for each
--- 'commodityAsset' being sold.
--- 
--- See: 'mkOrderInfo'.
+{- | For each unique 'OrderAssetPair' (see: 'equivalentAssetPair'): there are 2
+'OrderInfo' types: 'OrderInfo BuyOrder', and 'OrderInfo SellOrder'.
 
+For a buy order, the volume indicates the amount of 'commodityAsset' being bought.
+Whereas the price indicates the requested price, in 'currencyAsset', of each
+'commodityAsset' being bought.
+
+For a sell order, the volume indicates the amount of 'commodityAsset' being sold.
+Whereas the price indicates the requested price, in 'currencyAsset', for each
+'commodityAsset' being sold.
+
+See: 'mkOrderInfo'.
+-}
 data DEXOrderData
-    = DEXOrderDataPartial PartialOrderInfo
-    | DEXOrderDataTwoWay  TwoWayOrderInfo deriving stock (Eq, Show)
+  = DEXOrderDataPartial PartialOrderInfo
+  | DEXOrderDataTwoWay TwoWayOrderInfo
+  deriving stock (Eq, Show)
 
 type OrderInfo :: OrderType -> Type
 data OrderInfo t = OrderInfo
-  {
-    orderType   :: !(SOrderType t)  -- Buy or Sell
-  , orderAsset  :: !OrderAssetPair  -- assets offered and asked in order
-  , orderVolume :: !Volume          -- min/max volume of 'commodityAsset' being bought or sold
-  , orderAmount :: !Natural         -- amount listed inside the order
-  , orderPrice  :: !Price           -- price of each 'commodityAsset' expressed in terms of 'currencyAsset'
-  , orderData   :: !(Maybe DEXOrderData) -- full info of order to facilitate filling
-  , orderCert   :: !(Maybe OracleCertificate) -- price certificate to place order
-  , orderDir    :: !(Maybe TWFillDirection)
+  { orderType :: !(SOrderType t) -- Buy or Sell
+  , orderAsset :: !OrderAssetPair -- assets offered and asked in order
+  , orderVolume :: !Volume -- min/max volume of 'commodityAsset' being bought or sold
+  , orderAmount :: !Natural -- amount listed inside the order
+  , orderPrice :: !Price -- price of each 'commodityAsset' expressed in terms of 'currencyAsset'
+  , orderData :: !(Maybe DEXOrderData) -- full info of order to facilitate filling
+  , orderCert :: !(Maybe OracleCertificate) -- price certificate to place order
+  , orderDir :: !(Maybe TWFillDirection)
   }
   deriving stock (Eq, Show)
 
 -- | Existential that can encapsulate both buy and sell orders.
 data SomeOrderInfo = forall t. SomeOrderInfo (OrderInfo t)
+
 deriving stock instance Show SomeOrderInfo
 
--- | Given a partialOrderInfo from a DEX order on the chain, and the
--- OrderAssetPair that determines the commodity and currency asset. Determine the
--- type of the order (buy/sell) and yield a 'exists t. OrderInfo t'.
--- 
--- == How does one deal with converting volume and price?
--- 
--- Inside an 'OrderInfo', the 'volume' always uses the 'commodityAsset' as its unit,
--- whereas the 'price' uses the 'currencyAsset' as its unit. In the DEX however, all
--- orders are really sell orders. They are offering some amount of some asset, and
--- asking for another.
--- 
--- For sell orders, where the offered asset in the DEX order is deemed to be a
--- 'commodityAsset', there is no conversion necessary. 'volume' is simply in terms
--- of the offered asset amount and the minFill is simply 1.
--- Similarly, 'price' is the same as the DEX order's price.
--- 
--- But what about buy orders? These are the orders that are offering an asset which
--- is deemed to be a 'currencyAsset'. And they are asking for an asset which is deemed
--- to be a 'commodityAsset'.
--- 
--- In that case, the price is simply the DEX order's price but flipped (e.g x % y -> y % x).
--- 
--- The volume conversion is slightly more involved, the max volume is the DEX order's
--- price multiplied by the DEX order's offered amount. If the result is not a whole
--- number, it is ceiled - because more payment is always accepted, but less is not.
--- The min volume is just the ceiling of the price, because that's the amount of
--- commodity assets you would need to pay to access 1 of the offered currencyAssets.
+{- | Given a partialOrderInfo from a DEX order on the chain, and the
+OrderAssetPair that determines the commodity and currency asset. Determine the
+type of the order (buy/sell) and yield a 'exists t. OrderInfo t'.
+
+== How does one deal with converting volume and price?
+
+Inside an 'OrderInfo', the 'volume' always uses the 'commodityAsset' as its unit,
+whereas the 'price' uses the 'currencyAsset' as its unit. In the DEX however, all
+orders are really sell orders. They are offering some amount of some asset, and
+asking for another.
+
+For sell orders, where the offered asset in the DEX order is deemed to be a
+'commodityAsset', there is no conversion necessary. 'volume' is simply in terms
+of the offered asset amount and the minFill is simply 1.
+Similarly, 'price' is the same as the DEX order's price.
+
+But what about buy orders? These are the orders that are offering an asset which
+is deemed to be a 'currencyAsset'. And they are asking for an asset which is deemed
+to be a 'commodityAsset'.
+
+In that case, the price is simply the DEX order's price but flipped (e.g x % y -> y % x).
+
+The volume conversion is slightly more involved, the max volume is the DEX order's
+price multiplied by the DEX order's offered amount. If the result is not a whole
+number, it is ceiled - because more payment is always accepted, but less is not.
+The min volume is just the ceiling of the price, because that's the amount of
+commodity assets you would need to pay to access 1 of the offered currencyAssets.
+-}
 mkOrderInfo ::
+  -- | currency/commodity pair
   OrderAssetPair ->
-  -- ^ currency/commodity pair
-  GYAssetClass   ->
-  -- ^ asked asset
-  Rational       ->
-  -- ^ asked price
-  Natural        ->
-  -- ^ offered amount
-  DEXOrderData   ->
-  -- ^ partial order or two way order info
+  -- | asked asset
+  GYAssetClass ->
+  -- | asked price
+  Rational ->
+  -- | offered amount
+  Natural ->
+  -- | partial order or two way order info
+  DEXOrderData ->
   Maybe OracleCertificate ->
   (Maybe TWFillDirection) ->
   SomeOrderInfo
@@ -155,69 +155,69 @@ mkOrderInfo oap askedAsset askedPrice offeredAmount dexOrderData mcert mdir = ca
   builder t vol amt price = SomeOrderInfo $ OrderInfo t oap vol amt price (Just dexOrderData) mcert mdir
 
 mkOrderInfoPO :: OrderAssetPair -> PartialOrderInfo -> SomeOrderInfo
-mkOrderInfoPO oap poi@PartialOrderInfo{..} =
-    mkOrderInfo
-      oap
-      poiAskedAsset
-      (rationalToGHC poiPrice)
-      poiOfferedAmount
-      (DEXOrderDataPartial poi)
-      Nothing
-      Nothing
+mkOrderInfoPO oap poi@PartialOrderInfo {..} =
+  mkOrderInfo
+    oap
+    poiAskedAsset
+    (rationalToGHC poiPrice)
+    poiOfferedAmount
+    (DEXOrderDataPartial poi)
+    Nothing
+    Nothing
 
 deltaToPrice :: Rational -> PriceDelta -> Rational
 deltaToPrice curr del = curr * (1 + spread') + offset'
-  where spread' = rationalToGHC (spread del)
-        offset' = rationalToGHC (offset del)
+ where
+  spread' = rationalToGHC (spread del)
+  offset' = rationalToGHC (offset del)
 
-mkOrderInfoTWO :: 
+mkOrderInfoTWO ::
   OrderAssetPair ->
-  TwoWayOrderInfo -> 
+  TwoWayOrderInfo ->
   IO (Either SomeOrderInfo (SomeOrderInfo, SomeOrderInfo))
 mkOrderInfoTWO oap twoi = do
-    let OrderAssets{..} = extractOrderAssets twoi
-    case oaReverseAmount == 0 of
-        -- one-way order
-        True  -> do
-            cert <- fromJust <$> getOracleCertificate (oaStraightAsset, oaReverseAsset)
-            let OrderPrices{..} = extractOrderPrices twoi
-                currPrice = extractPriceFromCert cert
-            pure . Left $ case opStraightPrice of
-                  FixedVal price   ->
-                      mkOrderInfo
-                        oap
-                        oaReverseAsset
-                        (rationalToGHC price)
-                        (fromIntegral oaStraightAmount)
-                        (DEXOrderDataTwoWay twoi)
-                        (Just cert)
-                        (Just FillDirectionStraight)
-                  DynamicVal delta ->
-                      mkOrderInfo
-                        oap
-                        oaReverseAsset
-                        (deltaToPrice currPrice delta)
-                        (fromIntegral oaStraightAmount)
-                        (DEXOrderDataTwoWay twoi)
-                        (Just cert)
-                        (Just FillDirectionStraight)
+  let OrderAssets {..} = extractOrderAssets twoi
+  case oaReverseAmount == 0 of
+    -- one-way order
+    True -> do
+      cert <- fromJust <$> getOracleCertificate (oaStraightAsset, oaReverseAsset)
+      let OrderPrices {..} = extractOrderPrices twoi
+          currPrice = extractPriceFromCert cert
+      pure . Left $ case opStraightPrice of
+        FixedVal price ->
+          mkOrderInfo
+            oap
+            oaReverseAsset
+            (rationalToGHC price)
+            (fromIntegral oaStraightAmount)
+            (DEXOrderDataTwoWay twoi)
+            (Just cert)
+            (Just FillDirectionStraight)
+        DynamicVal delta ->
+          mkOrderInfo
+            oap
+            oaReverseAsset
+            (deltaToPrice currPrice delta)
+            (fromIntegral oaStraightAmount)
+            (DEXOrderDataTwoWay twoi)
+            (Just cert)
+            (Just FillDirectionStraight)
 
-        -- two-way order
-        False -> do
-            certOne <- fromJust <$> getOracleCertificate (oaStraightAsset, oaReverseAsset)
-            certTwo <- fromJust <$> getOracleCertificate (oaReverseAsset, oaStraightAsset)
-            let OrderPrices{..} = extractOrderPrices twoi
-                currStPrice   = extractPriceFromCert certOne
-                currRevPrice  = extractPriceFromCert certTwo
-                (stPrice, revPrice) = case (opStraightPrice, opReversePrice) of
-                    (FixedVal sp, Just (FixedVal rp))     -> (rationalToGHC sp, rationalToGHC rp)
-                    (DynamicVal sd, Just(DynamicVal rd))  -> (deltaToPrice currStPrice sd, deltaToPrice currRevPrice rd)
-                    _ -> error "failed to produce OrderInfo from TwoWayOrder"
-            pure . Right $
-                  (
-                    mkOrderInfo oap oaReverseAsset  stPrice  (fromIntegral oaStraightAmount) (DEXOrderDataTwoWay twoi) (Just certOne) (Just FillDirectionStraight)
-                  , mkOrderInfo oap oaStraightAsset revPrice (fromIntegral oaReverseAmount) (DEXOrderDataTwoWay twoi) (Just certTwo) (Just FillDirectionReverse)
-                  )
+    -- two-way order
+    False -> do
+      certOne <- fromJust <$> getOracleCertificate (oaStraightAsset, oaReverseAsset)
+      certTwo <- fromJust <$> getOracleCertificate (oaReverseAsset, oaStraightAsset)
+      let OrderPrices {..} = extractOrderPrices twoi
+          currStPrice = extractPriceFromCert certOne
+          currRevPrice = extractPriceFromCert certTwo
+          (stPrice, revPrice) = case (opStraightPrice, opReversePrice) of
+            (FixedVal sp, Just (FixedVal rp)) -> (rationalToGHC sp, rationalToGHC rp)
+            (DynamicVal sd, Just (DynamicVal rd)) -> (deltaToPrice currStPrice sd, deltaToPrice currRevPrice rd)
+            _ -> error "failed to produce OrderInfo from TwoWayOrder"
+      pure . Right $
+        ( mkOrderInfo oap oaReverseAsset stPrice (fromIntegral oaStraightAmount) (DEXOrderDataTwoWay twoi) (Just certOne) (Just FillDirectionStraight)
+        , mkOrderInfo oap oaStraightAsset revPrice (fromIntegral oaReverseAmount) (DEXOrderDataTwoWay twoi) (Just certTwo) (Just FillDirectionReverse)
+        )
 
 isSellOrder :: OrderInfo t -> Bool
 isSellOrder OrderInfo {orderType = SSellOrder} = True
@@ -254,15 +254,16 @@ instance SOrderTypeI 'SellOrder where
 -- Order components
 -------------------------------------------------------------------------------
 
--- | The amount of the commodity asset (being brought or sold), represented as
--- a closed interval.
--- 
--- Although the contract permits fills as low a 1 indivisible token,
--- the @volumeMin@ field is still needed, because Buy orders are normalized and you
--- can't always fill it for 1. The amount depends on the price of the order.
--- 
--- @volumeMin@ should always be @<= volumeMax@. Users are responsible for maintaining
--- this invariant.
+{- | The amount of the commodity asset (being brought or sold), represented as
+a closed interval.
+
+Although the contract permits fills as low a 1 indivisible token,
+the @volumeMin@ field is still needed, because Buy orders are normalized and you
+can't always fill it for 1. The amount depends on the price of the order.
+
+@volumeMin@ should always be @<= volumeMax@. Users are responsible for maintaining
+this invariant.
+-}
 data Volume = Volume
   { volumeMin :: !Natural
   -- ^ Minimum bound of the Order volume interval.
@@ -287,14 +288,15 @@ instance Monoid Price where
   mempty = Price 0
   {-# INLINEABLE mempty #-}
 
--- | The asset pair in a DEX Order.
--- 
--- All 'OrderAssetPair's constructed out of equivalent raw asset pairs, must compare
--- equal. See: 'equivalentAssetPair'.
--- 
--- For each unique asset pair (see: 'mkAssetPair'), one asset is chosen as the
--- "commodity" (being sold), and the other is chosen as the "currency" - this makes
--- it simpler to perform order matching.
+{- | The asset pair in a DEX Order.
+
+All 'OrderAssetPair's constructed out of equivalent raw asset pairs, must compare
+equal. See: 'equivalentAssetPair'.
+
+For each unique asset pair (see: 'mkAssetPair'), one asset is chosen as the
+"commodity" (being sold), and the other is chosen as the "currency" - this makes
+it simpler to perform order matching.
+-}
 data OrderAssetPair = OAssetPair
   { currencyAsset :: !GYAssetClass
   , commodityAsset :: !GYAssetClass
@@ -308,8 +310,9 @@ instance ToJSON OrderAssetPair where
       , "commodityAsset" .= commodityAsset
       ]
 
--- | Two order asset pairs are "equivalent" if they contain the same 2 assets irrespective of order
--- eg {currencyAsset = A, commodityAsset = B} and {currencyAsset = B, commodityAsset = A} are equivalent.
+{- | Two order asset pairs are "equivalent" if they contain the same 2 assets irrespective of order
+eg {currencyAsset = A, commodityAsset = B} and {currencyAsset = B, commodityAsset = A} are equivalent.
+-}
 equivalentAssetPair :: OrderAssetPair -> OrderAssetPair -> Bool
 equivalentAssetPair oap oap' = oap == oap' || oap == mkEquivalentAssetPair oap'
 
@@ -342,42 +345,42 @@ mkOrderType asked oap
   | commodityAsset oap == asked = BuyOrder
   | otherwise = SellOrder
 
--- | "Fill" refers to the _volume_ of the order filled. Therefore, its unit is always the 'commodityAsset'.
---
--- 'CompleteFill' just means the whole order is filled, whether it's buy or sell.
--- 
--- 'PartialFill' means slightly different things for the two order types. But the 'Natural' field within
--- always designates the 'commodityAsset'.
--- 
--- For sell orders, `PartialFill n` indicates that n amount of commodity tokens will be sold from the order,
--- and the respective payment will be made in the currency asset.
--- 
--- For buy orders, `PartialFill n` indicates that n amount of
--- commodity tokens should be bought, and the corresponding price (orderPrice * n), _floored_ if necessary,
--- must be paid by the order.
--- 
--- **NOTE**: The 'n' in 'PartialFill n' must not be the max volume of the order. Use 'CompleteFill' in those scenarios.
+{- | "Fill" refers to the _volume_ of the order filled. Therefore, its unit is always the 'commodityAsset'.
+
+'CompleteFill' just means the whole order is filled, whether it's buy or sell.
+
+'PartialFill' means slightly different things for the two order types. But the 'Natural' field within
+always designates the 'commodityAsset'.
+
+For sell orders, `PartialFill n` indicates that n amount of commodity tokens will be sold from the order,
+and the respective payment will be made in the currency asset.
+
+For buy orders, `PartialFill n` indicates that n amount of
+commodity tokens should be bought, and the corresponding price (orderPrice * n), _floored_ if necessary,
+must be paid by the order.
+
+**NOTE**: The 'n' in 'PartialFill n' must not be the max volume of the order. Use 'CompleteFill' in those scenarios.
+-}
 data FillType = CompleteFill | PartialFill Natural deriving stock (Eq, Show)
 
 data MatchExecutionInfo
   = forall t. OrderExecutionInfo !FillType !(OrderInfo t)
 
 instance ToJSON MatchExecutionInfo where
-  toJSON (OrderExecutionInfo fillT OrderInfo { orderType , orderAsset , orderVolume , orderPrice }) =
-      Aeson.object
-        [
-          "volumeMin" .= volumeMin orderVolume
-        , "volumeMax" .= volumeMax orderVolume
-        , "price"     .= getPrice orderPrice
-        , "commodity" .= commodityAsset orderAsset
-        , "currency"  .= currencyAsset orderAsset
-        , "type"      .= prettySOrderType orderType
-        , "fillType"  .= show fillT
-        ]
-     where
-      prettySOrderType :: SOrderType t -> Text
-      prettySOrderType SBuyOrder = "Buy"
-      prettySOrderType SSellOrder = "Sell"
+  toJSON (OrderExecutionInfo fillT OrderInfo {orderType, orderAsset, orderVolume, orderPrice}) =
+    Aeson.object
+      [ "volumeMin" .= volumeMin orderVolume
+      , "volumeMax" .= volumeMax orderVolume
+      , "price" .= getPrice orderPrice
+      , "commodity" .= commodityAsset orderAsset
+      , "currency" .= currencyAsset orderAsset
+      , "type" .= prettySOrderType orderType
+      , "fillType" .= show fillT
+      ]
+   where
+    prettySOrderType :: SOrderType t -> Text
+    prettySOrderType SBuyOrder = "Buy"
+    prettySOrderType SSellOrder = "Sell"
 
 completeFill :: OrderInfo t -> MatchExecutionInfo
 completeFill = OrderExecutionInfo CompleteFill

@@ -71,57 +71,56 @@ allOrderInfos c dex assetPairs = do
   cTime <- getCurrentGYTime
 
   partialOrderInfos <- runQuery c $ runReaderT (partialOrdersWithTransformerPredicate (dexPORefs dex) (partialOrderFilter cTime)) (dexScripts dex)
-  twoWayOrderInfos  <- runQuery c $ runReaderT (twoWayOrdersWithTransformerPredicate (dexTWORefs dex) (twoWayOrderFilter cTime)) (dexScripts dex)
+  twoWayOrderInfos <- runQuery c $ runReaderT (twoWayOrdersWithTransformerPredicate (dexTWORefs dex) (twoWayOrderFilter cTime)) (dexScripts dex)
 
   foldM g (foldl' f Map.empty partialOrderInfos) twoWayOrderInfos
+ where
+  f m (partialOrderInfoToOrderInfo -> info@(SomeOrderInfo OrderInfo {orderAsset})) = Map.insertWith (++) orderAsset [info] m
+  g m x = do
+    twois <- twoWayOrderInfoToOrderInfo x
+    case twois of
+      [info@(SomeOrderInfo OrderInfo {orderAsset})] -> return $ Map.insertWith (++) orderAsset [info] m
+      [info1@(SomeOrderInfo oi1), info2@(SomeOrderInfo oi2)] ->
+        return $ Map.insertWith (++) (orderAsset oi2) [info2] (Map.insertWith (++) (orderAsset oi1) [info1] m)
+      _ -> error "Two Way Orders with wrong token pair matched"
 
-  where
-    f m (partialOrderInfoToOrderInfo -> info@(SomeOrderInfo OrderInfo {orderAsset})) = Map.insertWith (++) orderAsset [info] m
-    g m x = do
-      twois <- twoWayOrderInfoToOrderInfo x
-      case twois of
-          [info@(SomeOrderInfo OrderInfo {orderAsset})] -> return $ Map.insertWith (++) orderAsset [info] m
-          [info1@(SomeOrderInfo oi1), info2@(SomeOrderInfo oi2)] ->
-            return $ Map.insertWith (++) (orderAsset oi2) [info2] (Map.insertWith (++) (orderAsset oi1) [info1] m)
-          _ -> error "Two Way Orders with wrong token pair matched"
+  partialOrderFilter :: GYTime -> PartialOrderInfo -> Maybe (OrderAssetPair, PartialOrderInfo)
+  partialOrderFilter cTime poi =
+    if inTimeOrderPartial cTime poi
+      then filterTokenPairPartial poi
+      else Nothing
 
-    partialOrderFilter :: GYTime -> PartialOrderInfo -> Maybe (OrderAssetPair, PartialOrderInfo)
-    partialOrderFilter cTime poi =
-      if inTimeOrderPartial cTime poi
-        then filterTokenPairPartial poi
-        else Nothing
+  twoWayOrderFilter :: GYTime -> TwoWayOrderInfo -> Maybe (OrderAssetPair, TwoWayOrderInfo)
+  twoWayOrderFilter cTime twoi =
+    if inTimeOrderTwoWay cTime twoi
+      then filterTokenPairTwoWay twoi
+      else Nothing
 
-    twoWayOrderFilter :: GYTime -> TwoWayOrderInfo -> Maybe (OrderAssetPair, TwoWayOrderInfo)
-    twoWayOrderFilter cTime twoi =
-      if inTimeOrderTwoWay cTime twoi
-        then filterTokenPairTwoWay twoi
-        else Nothing
+  filterTokenPairPartial :: PartialOrderInfo -> Maybe (OrderAssetPair, PartialOrderInfo)
+  filterTokenPairPartial poi@PartialOrderInfo {poiOfferedAsset, poiAskedAsset}
+    | assetPair1 `elem` assetPairs = Just (assetPair1, poi)
+    | assetPair2 `elem` assetPairs = Just (assetPair2, poi)
+    | otherwise = Nothing
+   where
+    assetPair1 = mkOrderAssetPair poiOfferedAsset poiAskedAsset
+    assetPair2 = mkOrderAssetPair poiAskedAsset poiOfferedAsset
 
-    filterTokenPairPartial :: PartialOrderInfo -> Maybe (OrderAssetPair, PartialOrderInfo)
-    filterTokenPairPartial poi@PartialOrderInfo {poiOfferedAsset, poiAskedAsset}
-      | assetPair1 `elem` assetPairs = Just (assetPair1, poi)
-      | assetPair2 `elem` assetPairs = Just (assetPair2, poi)
-      | otherwise = Nothing
-     where
-      assetPair1 = mkOrderAssetPair poiOfferedAsset poiAskedAsset
-      assetPair2 = mkOrderAssetPair poiAskedAsset poiOfferedAsset
+  filterTokenPairTwoWay :: TwoWayOrderInfo -> Maybe (OrderAssetPair, TwoWayOrderInfo)
+  filterTokenPairTwoWay twoi
+    | assetPair1 `elem` assetPairs = Just (assetPair1, twoi)
+    | assetPair2 `elem` assetPairs = Just (assetPair2, twoi)
+    | otherwise = Nothing
+   where
+    twoiOfferedAsset = oaStraightAsset (extractOrderAssets twoi)
+    twoiAskedAsset = oaReverseAsset (extractOrderAssets twoi)
+    assetPair1 = mkOrderAssetPair twoiOfferedAsset twoiAskedAsset
+    assetPair2 = mkOrderAssetPair twoiAskedAsset twoiOfferedAsset
 
-    filterTokenPairTwoWay :: TwoWayOrderInfo -> Maybe (OrderAssetPair, TwoWayOrderInfo)
-    filterTokenPairTwoWay twoi
-      | assetPair1 `elem` assetPairs = Just (assetPair1, twoi)
-      | assetPair2 `elem` assetPairs = Just (assetPair2, twoi)
-      | otherwise = Nothing
-     where
-      twoiOfferedAsset  = oaStraightAsset (extractOrderAssets twoi)
-      twoiAskedAsset    = oaReverseAsset  (extractOrderAssets twoi)
-      assetPair1        = mkOrderAssetPair twoiOfferedAsset twoiAskedAsset
-      assetPair2        = mkOrderAssetPair twoiAskedAsset twoiOfferedAsset
+  inTimeOrderPartial :: GYTime -> PartialOrderInfo -> Bool
+  inTimeOrderPartial time poi = isAfterStart time (poiStart poi) && isBeforeEnd time (poiEnd poi)
 
-    inTimeOrderPartial :: GYTime -> PartialOrderInfo -> Bool
-    inTimeOrderPartial time poi = isAfterStart time (poiStart poi) && isBeforeEnd time (poiEnd poi)
-
-    inTimeOrderTwoWay :: GYTime -> TwoWayOrderInfo -> Bool
-    inTimeOrderTwoWay time twoi = isAfterStart time (twoiStart twoi) && isBeforeEnd time (twoiEnd twoi)
+  inTimeOrderTwoWay :: GYTime -> TwoWayOrderInfo -> Bool
+  inTimeOrderTwoWay time twoi = isAfterStart time (twoiStart twoi) && isBeforeEnd time (twoiEnd twoi)
 
 partialOrderInfoToOrderInfo :: (OrderAssetPair, PartialOrderInfo) -> SomeOrderInfo
 partialOrderInfoToOrderInfo = uncurry mkOrderInfoPO
@@ -130,7 +129,7 @@ twoWayOrderInfoToOrderInfo :: (OrderAssetPair, TwoWayOrderInfo) -> IO [SomeOrder
 twoWayOrderInfoToOrderInfo (oap, twoi) = do
   soi <- mkOrderInfoTWO oap twoi
   pure $ case soi of
-    Left os        -> [os]
+    Left os -> [os]
     Right (os, or) -> [os, or]
 
 isAfterStart :: GYTime -> Maybe GYTime -> Bool

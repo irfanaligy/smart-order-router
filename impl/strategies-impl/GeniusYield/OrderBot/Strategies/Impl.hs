@@ -64,15 +64,16 @@ data StrategyState = StrategyState
 
 -- | Utility function for updating the state, after one run of the strategy.
 updateStrategyState :: (MatchResult, Orders 'BuyOrder) -> StrategyState -> StrategyState
-updateStrategyState ([],  bos') ss = ss {remainingOrders = bos'}
+updateStrategyState ([], bos') ss = ss {remainingOrders = bos'}
 updateStrategyState (mr', bos') StrategyState {matchResults = mr} =
   StrategyState
     { matchResults = mr ++ [mr']
     , remainingOrders = bos'
     }
 
--- | Strategy matching: Picking one sell order and matching it with many (up to
--- `maxOrders`) buy orders.
+{- | Strategy matching: Picking one sell order and matching it with many (up to
+`maxOrders`) buy orders.
+-}
 oneSellToManyBuy :: Natural -> OrderBook -> [MatchResult]
 oneSellToManyBuy maxOrders ob =
   matchResults $
@@ -82,7 +83,7 @@ oneSellToManyBuy maxOrders ob =
   go :: OrderInfo 'SellOrder -> State StrategyState ()
   go order = modify' $
     \st ->
-        updateStrategyState
+      updateStrategyState
         (multiFill (maxOrders - 1) (<=) order (remainingOrders st))
         st
 

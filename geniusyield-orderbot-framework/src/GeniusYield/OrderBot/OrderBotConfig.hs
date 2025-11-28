@@ -62,26 +62,30 @@ data OrderBotConfig
   , botCStakeAddress :: Maybe GYStakeAddressBech32
   -- ^ Optional bech32 encoded stake address.
   , botCCollateral :: Maybe GYTxOutRef
-  -- ^ UTxO ref of the collateral UTxO in the bot's wallet.
-  --
-  --          NOTE: If collateral is Nothing, then Atlas will choose some UTxO to
-  --           function as collateral. If a TxOutRef is given, the bool indicates wheter
-  --           the collateral can be spent in the tx.
+  {- ^ UTxO ref of the collateral UTxO in the bot's wallet.
+
+         NOTE: If collateral is Nothing, then Atlas will choose some UTxO to
+          function as collateral. If a TxOutRef is given, the bool indicates wheter
+          the collateral can be spent in the tx.
+  -}
   , botCExecutionStrat :: BotStrategy
   -- ^ Name of the running strategy.
   , botCAssetFilter :: [OrderAssetPair]
   -- ^ List of asset pairs to scan.
   , botCRescanDelay :: Int
-  -- ^ The duration (microseconds) of time we wait before re-initiating a
-  --          complete iteration for the bot.
+  {- ^ The duration (microseconds) of time we wait before re-initiating a
+         complete iteration for the bot.
+  -}
   , botCMaxOrderMatches :: Int
   -- ^ The maximum amount of orders to be matched into a single transaction.
   , botCMaxTxsPerIteration :: Int
-  -- ^ The maximum amount of transactions that the bot will build, sign and
-  --          submit in each iteration.
+  {- ^ The maximum amount of transactions that the bot will build, sign and
+         submit in each iteration.
+  -}
   , botCRandomizeMatchesFound :: Bool
-  -- ^ A boolean that dictates whether the bot chooses the tx to submit at
-  --          random (to decrease collisions), or not (to maximize profit)
+  {- ^ A boolean that dictates whether the bot chooses the tx to submit at
+         random (to decrease collisions), or not (to maximize profit)
+  -}
   , botCLovelaceWarningThreshold :: Maybe Natural
   -- ^ If bot's lovelace balance falls below this value, bot would log warning logs.
   , botCTokenInfos :: Maybe (Map GYAssetClass AssetInfo)
