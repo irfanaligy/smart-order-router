@@ -91,25 +91,27 @@ genOrderInfosWrongPrices = do
 
   sellOrderIsProfitable :: OrderInfo 'BuyOrder -> OrderInfo 'SellOrder -> Bool
   sellOrderIsProfitable bOrder sOrder =
-    price sOrder <= price bOrder
-      && volumeMin (volume sOrder) <= volumeMax (volume bOrder)
-      && volumeMin (volume bOrder) <= volumeMax (volume sOrder)
+    orderPrice sOrder <= orderPrice bOrder
+      && volumeMin (orderVolume sOrder) <= volumeMax (orderVolume bOrder)
+      && volumeMin (orderVolume bOrder) <= volumeMax (orderVolume sOrder)
 
   genBuyOrder' :: OrderAssetPair -> Gen (OrderInfo 'BuyOrder)
   genBuyOrder' oap = do
-    price <- genPrice `suchThat` ((< (50 % 1)) . getPrice)
-    volume <- genVolume (ceiling $ getPrice price)
-    utxoRef <- genGYTxOutRef
-    return $ OrderInfo utxoRef SBuyOrder oap volume price Nothing
+    orderPrice <- genPrice `suchThat` ((< (50 % 1)) . getPrice)
+    orderVolume <- genVolume (ceiling $ getPrice orderPrice)
+    -- utxoRef <- genGYTxOutRef
+    return $ OrderInfo SBuyOrder oap orderVolume 0 orderPrice Nothing Nothing Nothing
 
   genSellOrder' :: OrderAssetPair -> Gen (OrderInfo 'SellOrder)
   genSellOrder' oap =
     OrderInfo
-      <$> genGYTxOutRef
-      <*> pure SSellOrder
+      <$> pure SSellOrder
       <*> pure oap
       <*> genVolume 1
+      <*> pure 0
       <*> genPrice `suchThat` ((> (50 % 1)) . getPrice)
+      <*> pure Nothing
+      <*> pure Nothing
       <*> pure Nothing
 
 {- | Property that checks if the sum of the offered tokens in the buy orders is
@@ -144,9 +146,9 @@ propCanExecuteFill = all canFill
  where
   canFill :: MatchExecutionInfo -> Bool
   canFill (OrderExecutionInfo CompleteFill _) = True
-  canFill (OrderExecutionInfo (PartialFill n) OrderInfo {volume}) =
-    n >= volumeMin volume
-      && n < volumeMax volume
+  canFill (OrderExecutionInfo (PartialFill n) OrderInfo {orderVolume}) =
+    n >= volumeMin orderVolume
+      && n < volumeMax orderVolume
 
 --------------------------------------------------
 
@@ -169,7 +171,7 @@ sumOfOffered :: [MatchExecutionInfo] -> Natural
 sumOfOffered = foldl (\acc -> (+) acc . eiOffered) 0
  where
   eiOffered :: MatchExecutionInfo -> Natural
-  eiOffered (OrderExecutionInfo CompleteFill OrderInfo {volume}) = volumeMax volume
+  eiOffered (OrderExecutionInfo CompleteFill OrderInfo {orderVolume}) = volumeMax orderVolume
   eiOffered (OrderExecutionInfo (PartialFill n) _) = n
 
 -- | Given a list of MatchExecutionInfo, sums the price tokens neccesary for the fills
@@ -177,10 +179,10 @@ sumOfPrice :: [MatchExecutionInfo] -> Natural
 sumOfPrice = foldl (\acc -> (+) acc . eiOfferedByPrice) 0
  where
   eiOfferedByPrice :: MatchExecutionInfo -> Natural
-  eiOfferedByPrice (OrderExecutionInfo CompleteFill OrderInfo {volume, price}) =
-    ceiling $ (toInteger (volumeMax volume) % 1) * getPrice price
-  eiOfferedByPrice (OrderExecutionInfo (PartialFill n) OrderInfo {price}) =
-    ceiling $ (toInteger n % 1) * getPrice price
+  eiOfferedByPrice (OrderExecutionInfo CompleteFill OrderInfo {orderVolume, orderPrice}) =
+    ceiling $ (toInteger (volumeMax orderVolume) % 1) * getPrice orderPrice
+  eiOfferedByPrice (OrderExecutionInfo (PartialFill n) OrderInfo {orderPrice}) =
+    ceiling $ (toInteger n % 1) * getPrice orderPrice
 
 {- | Shrink function for the CanFindOnlyMatching property.
 
@@ -198,10 +200,10 @@ shrinkTuple' (oap, xs, ys, bo, so) =
     ++ [(oap, xs, ys', bo, so) | ys' <- shrinkList shrinkOrderInfo ys]
     ++ [ (oap, xs, ys, bo', so)
        | bo' <- shrinkOrderInfo bo
-       , volumeMin (volume so) < volumeMax (volume bo')
-       , price so < price bo'
+       , volumeMin (orderVolume so) < volumeMax (orderVolume bo')
+       , orderPrice so < orderPrice bo'
        ]
     ++ [ (oap, xs, ys, bo, so')
        | so' <- shrinkOrderInfo so
-       , volumeMin (volume bo) < volumeMax (volume so')
+       , volumeMin (orderVolume bo) < volumeMax (orderVolume so')
        ]

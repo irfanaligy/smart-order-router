@@ -26,3 +26,7 @@ config-files/*
 *.vkey
 *.addr
 .vscode
+*.swp
+tags
+TAGS
+config-core.json

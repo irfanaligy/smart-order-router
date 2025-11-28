@@ -113,9 +113,12 @@ library common
     geniusyield-dex-api,
     postgresql-simple,
     postgresql-simple-url,
+    req,
+    base16-bytestring
 
   exposed-modules:
     GeniusYield.OrderBot.Types
+    GeniusYield.OrderBot.Oracle
 
   ghc-options:
     -O2
@@ -185,8 +188,6 @@ library
     geniusyield-orderbot-framework:datasource,
     geniusyield-orderbot-framework:orderbook,
     geniusyield-orderbot-framework:strategies,
-    geniusyield-server-lib,
-    http-api-data,
     maestro-sdk,
     vector,
 

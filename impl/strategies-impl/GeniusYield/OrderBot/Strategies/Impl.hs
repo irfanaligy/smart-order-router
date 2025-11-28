@@ -63,33 +63,25 @@ data StrategyState = StrategyState
   }
 
 -- | Utility function for updating the state, after one run of the strategy.
-updateStrategyState ::
-  MatchResult ->
-  Orders 'BuyOrder ->
-  StrategyState ->
-  StrategyState
-updateStrategyState [] bos' ss = ss {remainingOrders = bos'}
-updateStrategyState mr' bos' StrategyState {matchResults = mr} =
+updateStrategyState :: (MatchResult, Orders 'BuyOrder) -> StrategyState -> StrategyState
+updateStrategyState ([],  bos') ss = ss {remainingOrders = bos'}
+updateStrategyState (mr', bos') StrategyState {matchResults = mr} =
   StrategyState
     { matchResults = mr ++ [mr']
     , remainingOrders = bos'
     }
 
-{- | Strategy matching: Picking one sell order and matching it with many (up to
-     `maxOrders`) buy orders.
--}
+-- | Strategy matching: Picking one sell order and matching it with many (up to
+-- `maxOrders`) buy orders.
 oneSellToManyBuy :: Natural -> OrderBook -> [MatchResult]
 oneSellToManyBuy maxOrders ob =
   matchResults $
     execState (mapMOrders_ go $ sellOrders ob) $
       StrategyState {matchResults = [], remainingOrders = buyOrders ob}
  where
-  go ::
-    OrderInfo 'SellOrder ->
-    State StrategyState ()
+  go :: OrderInfo 'SellOrder -> State StrategyState ()
   go order = modify' $
     \st ->
-      uncurry
         updateStrategyState
         (multiFill (maxOrders - 1) (<=) order (remainingOrders st))
         st
@@ -104,8 +96,8 @@ multiFill ::
   (MatchResult, Orders b')
 multiFill maxOrders checkPrices order = go (maxOrders - 1) vh
  where
-  (Volume vl vh) = volume order
-  checkPrice = checkPrices $ price order
+  (Volume vl vh) = orderVolume order
+  checkPrice = checkPrices $ orderPrice order
 
   go :: Natural -> Natural -> Orders b' -> (MatchResult, Orders b')
   go _ 0 os = ([completeFill order], os)
@@ -133,7 +125,7 @@ multiFill maxOrders checkPrices order = go (maxOrders - 1) vh
               ([completeFill order, partialFill o remVol], os)
           | otherwise -> updateRemaining o $ go limitO remVol os
        where
-        xP = price o
-        (Volume minFillX maxFillX) = volume o
+        xP = orderPrice o
+        (Volume minFillX maxFillX) = orderVolume o
 
         updateRemaining x (a, b) = (a, insertOrder x b)

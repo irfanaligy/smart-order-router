@@ -53,18 +53,20 @@ genBuyOrder :: OrderAssetPair -> Gen (OrderInfo 'BuyOrder)
 genBuyOrder oap = do
   price <- genPrice
   volume <- genVolume (ceiling $ getPrice price)
-  utxoRef <- genGYTxOutRef
-  return $ OrderInfo utxoRef SBuyOrder oap volume price Nothing
+  -- utxoRef <- genGYTxOutRef
+  return $ OrderInfo SBuyOrder oap volume 0 price Nothing Nothing Nothing
 
 -- | Generator for a sell order, using all previous generators
 genSellOrder :: OrderAssetPair -> Gen (OrderInfo 'SellOrder)
 genSellOrder oap =
   OrderInfo
-    <$> genGYTxOutRef
-    <*> pure SSellOrder
+    <$> pure SSellOrder
     <*> pure oap
     <*> genVolume 1
+    <*> pure 0
     <*> genPrice
+    <*> pure Nothing
+    <*> pure Nothing
     <*> pure Nothing
 
 {- | Shrink function for the tuples used in properties.
@@ -83,7 +85,7 @@ shrinkTuple (oap, xs, ys) =
 -- | Shrinks an OrderInfo by shrinking it's volume
 shrinkOrderInfo :: forall t. OrderInfo t -> [OrderInfo t]
 shrinkOrderInfo order =
-  [order {volume = vol'} | vol' <- shrinkVolume (volume order)]
+  [order {orderVolume = vol'} | vol' <- shrinkVolume (orderVolume order)]
 
 {- | Shrinks a Volume by making sure the max is over the min.
      The min is fixed, so no need to shrink it.

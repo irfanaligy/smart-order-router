@@ -54,7 +54,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Maybe (listToMaybe)
 import Data.Ord (Down (Down))
-import GeniusYield.Api.Dex.Constants (DEXInfo)
+import GeniusYield.Api.DEX.Constants (DEXInfo)
 import GeniusYield.OrderBot.DataSource (
   Connection,
   withEachAssetOrders,
@@ -87,13 +87,7 @@ populateOrderBook ::
   [OrderAssetPair] ->
   IO MultiAssetOrderBook
 populateOrderBook conn dex f = do
-  multiAssetBookL <-
-    withEachAssetOrders
-      conn
-      dex
-      f
-      buildOrderBookList
-      []
+  multiAssetBookL <- withEachAssetOrders conn dex f buildOrderBookList []
   pure $ mkMultiAssetOrderBook multiAssetBookL
 
 buildOrderBookList ::
@@ -105,8 +99,8 @@ buildOrderBookList acc (# _, [], _ #) = acc
 buildOrderBookList acc (# oap, buyOrders, sellOrders #) =
   ( oap
   , OrderBook
-      (Orders $ sortOn price sellOrders)
-      (Orders $ sortOn (Down . price) buyOrders)
+      (Orders $ sortOn orderPrice sellOrders)
+      (Orders $ sortOn (Down . orderPrice) buyOrders)
   )
     : acc
 
@@ -120,8 +114,8 @@ unconsOrders (Orders (x : xs)) = Just (x, Orders xs)
 insertOrder :: OrderInfo t -> Orders t -> Orders t
 insertOrder oi (Orders os) = Orders $
   case orderType oi of
-    SBuyOrder -> insertBy (\oadd opresent -> compare (price opresent) (price oadd)) oi os
-    SSellOrder -> insertBy (\oadd opresent -> compare (price oadd) (price opresent)) oi os
+    SBuyOrder -> insertBy (\oadd opresent -> compare (orderPrice opresent) (orderPrice oadd)) oi os
+    SSellOrder -> insertBy (\oadd opresent -> compare (orderPrice oadd) (orderPrice opresent)) oi os
 
 deleteOrder :: OrderInfo t -> Orders t -> Orders t
 deleteOrder oi (Orders os) = Orders $ delete oi os
@@ -157,19 +151,19 @@ nullOrders :: Orders t -> Bool
 nullOrders = null . unOrders
 
 ordersLTPrice :: Price -> Orders t -> Orders t
-ordersLTPrice maxPrice = Orders . filter (\oi -> price oi < maxPrice) . unOrders
+ordersLTPrice maxPrice = Orders . filter (\oi -> orderPrice oi < maxPrice) . unOrders
 
 ordersLTEPrice :: Price -> Orders t -> Orders t
-ordersLTEPrice maxPrice = Orders . filter (\oi -> price oi <= maxPrice) . unOrders
+ordersLTEPrice maxPrice = Orders . filter (\oi -> orderPrice oi <= maxPrice) . unOrders
 
 ordersGTPrice :: Price -> Orders t -> Orders t
-ordersGTPrice maxPrice = Orders . filter (\oi -> price oi > maxPrice) . unOrders
+ordersGTPrice maxPrice = Orders . filter (\oi -> orderPrice oi > maxPrice) . unOrders
 
 ordersGTEPrice :: Price -> Orders t -> Orders t
-ordersGTEPrice maxPrice = Orders . filter (\oi -> price oi >= maxPrice) . unOrders
+ordersGTEPrice maxPrice = Orders . filter (\oi -> orderPrice oi >= maxPrice) . unOrders
 
 sumVolumes :: [OrderInfo t] -> Volume
-sumVolumes = foldMap volume
+sumVolumes = foldMap orderVolume
 
 volumeLTPrice :: Price -> Orders t -> Volume
 volumeLTPrice p = sumVolumes . unOrders . ordersLTPrice p

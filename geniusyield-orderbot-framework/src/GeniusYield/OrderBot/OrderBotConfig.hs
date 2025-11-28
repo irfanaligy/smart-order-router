@@ -84,8 +84,6 @@ data OrderBotConfig
   --          random (to decrease collisions), or not (to maximize profit)
   , botCLovelaceWarningThreshold :: Maybe Natural
   -- ^ If bot's lovelace balance falls below this value, bot would log warning logs.
-  , botCPriceProvider :: Maybe PriceProviderConfig
-  -- ^ Price provider used to get ADA value of a token
   , botCTokenInfos :: Maybe (Map GYAssetClass AssetInfo)
   -- ^ Token registry information. Since prices given by provider are usually in display units, we need information such as registered decimal places to know lovelace value per indivisible token unit.
   }
@@ -104,7 +102,6 @@ instance FromEnv OrderBotConfig where
       <*> envWithMsg "Must be either 'True' or 'False'" "BOTC_RANDOMIZE_MATCHES_FOUND"
       -- Apparently, there is no `Var` instance for `Natural` in `System.Envy`.
       <*> (fmap (fromIntegral @Word64 @Natural) <$> envMaybe "BOTC_LOVELACE_WARNING_THRESHOLD")
-      <*> (fmap forceFromJson <$> envMaybe "BOTC_PRICE_PROVIDER")
       <*> (fmap forceFromJson <$> envMaybe "BOTC_TOKEN_INFOS")
    where
     parseCBORSKey :: String -> GYPaymentSigningKey
@@ -140,7 +137,6 @@ instance FromJSON OrderBotConfig where
       <*> obj .: "maxTxsPerIteration"
       <*> obj .: "randomizeMatchesFound"
       <*> obj .:? "lovelaceWarningThreshold"
-      <*> obj .:? "priceProvider"
       <*> obj .:? "tokenInfos"
   parseJSON _ = fail "Expecting object value"
 
@@ -177,7 +173,6 @@ buildOrderBot OrderBotConfig {..} = do
       , botRescanDelay = botCRescanDelay
       , botTakeMatches = takeMatches botCRandomizeMatchesFound maxTxPerIter
       , botLovelaceWarningThreshold = botCLovelaceWarningThreshold
-      , botPriceProvider = botCPriceProvider
       , botTokenInfos = fromMaybe mempty botCTokenInfos
       }
  where
