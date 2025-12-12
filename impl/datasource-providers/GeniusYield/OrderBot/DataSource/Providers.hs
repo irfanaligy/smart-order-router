@@ -13,13 +13,9 @@ module GeniusYield.OrderBot.DataSource.Providers (
 ) where
 
 import Control.Monad
-import Text.Pretty.Simple (pPrint)
-import Data.Maybe
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad (foldM)
 import Control.Monad.Reader (ReaderT (runReaderT))
 import Data.List (foldl')
-import Data.Map.Strict (Map, unionWith, toList)
+import Data.Map.Strict (Map, unionWith)
 import qualified Data.Map.Strict as Map
 import GeniusYield.Api.DEX.Constants (DEXInfo (..))
 import GeniusYield.Api.DEX.PartialOrder
@@ -73,19 +69,19 @@ allOrderInfos ::
   IO (Map OrderAssetPair [SomeOrderInfo])
 allOrderInfos c dex assetPairs = do
   cTime <- getCurrentGYTime
-  partialOrderInfos <- runQuery c $ runReaderT (partialOrdersWithTransformerPredicate (dexPORefs dex)  (partialOrderFilter cTime)) (dexScripts dex)
-  twoWayOrderInfos  <- runQuery c $ runReaderT (twoWayOrdersWithTransformerPredicate  (dexTWORefs dex) (twoWayOrderFilter cTime)) (dexScripts dex)
+  partialOrderInfos <- runQuery c $ runReaderT (partialOrdersWithTransformerPredicate (dexPORefs dex) (partialOrderFilter cTime)) (dexScripts dex)
+  twoWayOrderInfos <- runQuery c $ runReaderT (twoWayOrdersWithTransformerPredicate (dexTWORefs dex) (twoWayOrderFilter cTime)) (dexScripts dex)
   let m1 = foldl' f Map.empty partialOrderInfos
   m2 <- foldM g Map.empty twoWayOrderInfos
   return $ unionWith (++) m1 m2
+ where
   -- forM_ (toList (unionWith (++) m1 m2)) (\(i, sois) -> (forM_ sois (\(SomeOrderInfo oi) -> print i >> ppOrderInfo oi)))
 
- where
   f m (partialOrderInfoToOrderInfo -> info@(SomeOrderInfo OrderInfo {orderAsset})) = Map.insertWith (++) orderAsset [info] m
   g m x = do
     twois <- twoWayOrderInfoToOrderInfo x
     case twois of
-      [info@(SomeOrderInfo oi@OrderInfo {orderAsset, orderData})] -> do
+      [info@(SomeOrderInfo OrderInfo {orderAsset})] -> do
         return $ Map.insertWith (++) orderAsset [info] m
       [info1@(SomeOrderInfo oi1), info2@(SomeOrderInfo oi2)] -> do
         return $ Map.insertWith (++) (orderAsset oi2) [info2] (Map.insertWith (++) (orderAsset oi1) [info1] m)

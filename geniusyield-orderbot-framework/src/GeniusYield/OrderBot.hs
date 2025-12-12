@@ -12,9 +12,6 @@ module GeniusYield.OrderBot (
   runOrderBot,
 ) where
 
-import Control.Monad
-import Control.Monad.IO.Class
-import Text.Pretty.Simple (pPrint)
 import Control.Arrow (second, (&&&))
 import Control.Concurrent (threadDelay)
 import Control.Exception (
@@ -28,14 +25,8 @@ import Control.Exception (
   -- throwIO,
   -- try,
  )
-import Control.Monad (
-  filterM,
-  forever,
-  unless,
-  when,
-  -- (<=<),
- )
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Reader (runReaderT)
 import Data.Aeson (encode)
 import qualified Data.ByteString.Char8 as B
@@ -63,12 +54,12 @@ import GeniusYield.OrderBot.DataSource (closeDB, connectDB)
 import GeniusYield.OrderBot.MatchingStrategy (
   IndependentStrategy,
   MatchExecutionInfo (..),
-  MatchResult (..),
+  MatchResult,
   executionSkeleton,
   matchExecutionInfoUtxoRef,
  )
 import GeniusYield.OrderBot.OrderBook (
-  OrderBook (..),
+  OrderBook,
   buyOrders,
   foldrOrders,
   maOrderBookToList,
@@ -76,7 +67,7 @@ import GeniusYield.OrderBot.OrderBook (
   sellOrders,
   withEachAsset,
  )
-import GeniusYield.OrderBot.Types (OrderAssetPair (..), OrderInfo (..), ppOrderInfo, extractPriceFromCert, getOracleCertificate)
+import GeniusYield.OrderBot.Types (OrderAssetPair (..), OrderInfo (..), extractPriceFromCert, getOracleCertificate, ppOrderInfo)
 import GeniusYield.Providers.Common (SubmitTxException)
 import GeniusYield.Transaction (GYCoinSelectionStrategy (GYLegacy))
 import GeniusYield.TxBuilder (
@@ -94,6 +85,7 @@ import GeniusYield.Types
 -- import qualified Maestro.Client.V1 as Maestro
 import qualified Maestro.Types.V1 as Maestro
 import System.Exit (exitSuccess)
+import Text.Pretty.Simple (pPrint)
 
 -- import Web.HttpApiData (ToHttpApiData (..))
 -- import GeniusYield.Scripts (GYCompiledScripts, readCompiledScripts)
@@ -151,12 +143,12 @@ sorNS :: GYLogNamespace
 sorNS = "SOR"
 
 runOrderBot ::
+  -- | Path to the config file for the GY framework.
   GYCoreConfig ->
-  -- ^ Path to the config file for the GY framework.
+  -- | Complete DEX information.
   DEXInfo ->
-  -- ^ Complete DEX information.
+  -- | OrderBot configuration.
   OrderBot ->
-  -- ^ OrderBot configuration.
   IO ()
 runOrderBot
   cfg
@@ -202,7 +194,7 @@ runOrderBot
           botUtxos <- runGYTxQueryMonadIO netId providers $ utxosAtAddresses botAddrs
           let botBalance = foldMapUTxOs utxoValue botUtxos
               botLovelaceBalance = valueAssetClass botBalance GYLovelace
-          logInfo $ unwords [ "Bot balance:" , show botBalance ]
+          logInfo $ unwords ["Bot balance:", show botBalance]
           when (botLovelaceBalance < maybe 0 fromIntegral botLovelaceWarningThreshold) $
             logWarn $
               unwords
@@ -216,13 +208,13 @@ runOrderBot
           book <- populateOrderBook conn dexinfo botAssetPairFilter
 
           let bookList = maOrderBookToList book
-          logInfo $ unwords [ "MultiAsset Order Book Info:" , unwords $ jsonBookInfo bookList ]
-          logDebug $ unwords [ "MultiAsset Order Book:" , jsonPrint bookList ]
-          
+          logInfo $ unwords ["MultiAsset Order Book Info:", unwords $ jsonBookInfo bookList]
+          logDebug $ unwords ["MultiAsset Order Book:", jsonPrint bookList]
+
           -- Now we pass each asset pair's orderbook to the provided execution strategy.
           let matchesFound = withEachAsset strat book
 
-          logDebug $ unwords [ "Matches Found:" , jsonPrint matchesFound ]
+          logDebug $ unwords ["Matches Found:", jsonPrint matchesFound]
           logInfo $
             unwords
               [ "Total matches found:"
@@ -235,12 +227,14 @@ runOrderBot
           unless (all null matchesFound) $ do
             matchesToExecute <- botTakeMatches matchesFound
 
-            logDebug $ unwords [ "Matches To Execute:" , jsonPrint matchesToExecute ]
+            logDebug $ unwords ["Matches To Execute:", jsonPrint matchesToExecute]
+            forM_ matchesToExecute ppMatchResult
 
-            logInfo $ unwords
-                 [ "Number Of Matches To Execute:"
-                 , jsonPrint $ M.toList $ matchingsPerOrderAssetPair botAssetPairFilter matchesToExecute
-                 ]
+            logInfo $
+              unwords
+                [ "Number Of Matches To Execute:"
+                , jsonPrint $ M.toList $ matchingsPerOrderAssetPair botAssetPairFilter matchesToExecute
+                ]
 
             -- We first build all the tx Bodies from the matches
             txs <- buildTransactions matchesToExecute dexinfo netId providers (botAddrs, botChangeAddr) botCollateral
@@ -283,6 +277,14 @@ runOrderBot
       let logErr = gyLogError providers sorNS
        in logErr (show err) >> threadDelay botRescanDelay
 
+    ppMatchResult :: MonadIO m => MatchResult -> m ()
+    ppMatchResult mr = liftIO $ do
+      putStrLn "=== BEGIN MatchResult ==="
+      forM_ mr $ \(OrderExecutionInfo ft oi) -> do
+        pPrint ft
+        ppOrderInfo oi
+      putStrLn "=== END MatchResult ==="
+
 signAndSubmitTx :: GYTxBody -> GYProviders -> GYPaymentSigningKey -> IO ()
 signAndSubmitTx txBody providers botSkey = handle handlerSubmit $ do
   let tx = signGYTxBody txBody [botSkey]
@@ -297,14 +299,6 @@ signAndSubmitTx txBody providers botSkey = handle handlerSubmit $ do
 
   handlerSubmit :: SubmitTxException -> IO ()
   handlerSubmit ex = logWarn $ unwords ["SubmitTxException:", show ex]
-
-ppMatchResult :: MonadIO m => MatchResult -> m ()
-ppMatchResult mr = liftIO $ do
-  putStrLn "=== BEGIN MatchResult ==="
-  forM_ mr $ \(OrderExecutionInfo ft oi) -> do
-    pPrint ft
-    ppOrderInfo oi
-  putStrLn "=== END MatchResult ==="
 
 buildTransactions ::
   [MatchResult] ->

@@ -32,7 +32,6 @@ module GeniusYield.OrderBot.Types (
   extractPriceFromCert,
 ) where
 
-import Text.Pretty.Simple (pPrint)
 import Control.Monad.IO.Class
 import Data.Aeson (ToJSON, (.=))
 import qualified Data.Aeson as Aeson
@@ -55,6 +54,7 @@ import GeniusYield.OrderBot.Oracle (OracleCertificate (..), Price (..), extractP
 import GeniusYield.Types (rationalToGHC)
 import GeniusYield.Types.Value (GYAssetClass (..))
 import Numeric.Natural (Natural)
+import Text.Pretty.Simple (pPrint)
 
 -------------------------------------------------------------------------------
 -- Information on DEX orders relevant to a matching strategy
@@ -92,33 +92,33 @@ data OrderInfo t = OrderInfo
   deriving stock (Eq, Show)
 
 ppOrderInfo :: MonadIO m => OrderInfo t -> m ()
-ppOrderInfo oi@OrderInfo{..} = do
-    liftIO $ putStrLn "-- BEGIN OrderInfo --"
-    pPrint orderType
-    pPrint orderAsset
-    pPrint orderVolume
-    pPrint orderAmount
-    pPrint orderPrice
-    pPrint orderDir
-    ppOrderData orderData
-    liftIO $ putStrLn "-- END OrderInfo --"
+ppOrderInfo oi@OrderInfo {..} = do
+  liftIO $ putStrLn "-- BEGIN OrderInfo --"
+  pPrint orderType
+  pPrint orderAsset
+  pPrint orderVolume
+  pPrint orderAmount
+  pPrint orderPrice
+  pPrint orderDir
+  ppOrderData orderData
+  liftIO $ putStrLn "-- END OrderInfo --"
 
 ppOrderData :: MonadIO m => Maybe DEXOrderData -> m ()
 ppOrderData (Just (DEXOrderDataPartial poi)) = do
   liftIO $ do
     putStrLn ("< PO >")
-    putStrLn ("ref: "     <> show (poiRef poi))
+    putStrLn ("ref: " <> show (poiRef poi))
     putStrLn ("offered: " <> show (poiOfferedAsset poi))
-    putStrLn ("asked: "   <> show (poiAskedAsset poi))
-    putStrLn ("price: "   <> show (poiPrice poi))
-    putStrLn ("amount: "  <> show (poiOfferedAmount poi))
+    putStrLn ("asked: " <> show (poiAskedAsset poi))
+    putStrLn ("price: " <> show (poiPrice poi))
+    putStrLn ("amount: " <> show (poiOfferedAmount poi))
 ppOrderData (Just (DEXOrderDataTwoWay twoi)) = do
   liftIO $ do
     putStrLn ("< TWO >")
-    pPrint ("twoiRef: "                 <> show (twoiRef twoi))
+    pPrint ("twoiRef: " <> show (twoiRef twoi))
     print ("twoiTakerLovelaceFlatFee: " <> show (twoiTakerLovelaceFlatFee twoi))
-    print ("twoiTakerFeeRatio: "        <> show (twoiTakerFeeRatio twoi))
-    print ("twoiMakerFeeRatio: "        <> show (twoiMakerFeeRatio twoi))
+    print ("twoiTakerFeeRatio: " <> show (twoiTakerFeeRatio twoi))
+    print ("twoiMakerFeeRatio: " <> show (twoiMakerFeeRatio twoi))
     pPrint (extractOrderAssets twoi)
     pPrint (extractOrderPrices twoi)
 ppOrderData _ = error "failed to print order data"

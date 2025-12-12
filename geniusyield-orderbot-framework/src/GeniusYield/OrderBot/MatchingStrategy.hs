@@ -18,7 +18,7 @@ module GeniusYield.OrderBot.MatchingStrategy (
 
 import Data.Either (lefts, rights)
 import Data.Maybe (fromJust)
-import Data.Ratio (numerator, denominator, (%))
+import Data.Ratio (denominator, numerator, (%))
 import GeniusYield.Api.DEX.PartialOrder (
   PORefs,
   PartialOrderInfo (..),
@@ -26,7 +26,6 @@ import GeniusYield.Api.DEX.PartialOrder (
 import GeniusYield.Api.DEX.TwoWayOrder (TWFillSpec (..), TwoWayOrderInfo (..), fillTwoWayAndLegacyPartialOrders)
 import GeniusYield.Api.DEX.TwoWayOrderConfig (RefTWOCD (..), TWORef (..))
 import GeniusYield.Api.Types (GYApiMonad)
-
 import GeniusYield.OrderBot.Strategies (
   IndependentStrategy,
   MatchResult,
@@ -52,25 +51,26 @@ executionSkeleton (twor, pors) recpAddr refTwo mr = do
   (pspecs, tspecs) = let specs = (map f mr) in (lefts specs, rights specs)
 
   f (OrderExecutionInfo ft o@(OrderInfo {orderData = Just (DEXOrderDataPartial poi)})) =
-      let getAmountPartial CompleteFill    = orderAmount o
-          getAmountPartial (PartialFill n) = if isBuyOrder o then floor $ fromIntegral n * getPrice (orderPrice o) else n
-      in Left (poiRef poi, getAmountPartial ft)
-
-  f (OrderExecutionInfo ft o@OrderInfo {orderData = Just (DEXOrderDataTwoWay twoi)}) = Right $
-      TWFillSpec {
-        twfsOrderRef = (twoiRef twoi)
-      , twfsDirection = fromJust (orderDir o)
-      , twfsAmount = getAmountTwo ft
-      , twfsOracleCertificate = orderCert o
-      , twfsRecipient = recpAddr
-      }
-      where
-        calcNet o = ceiling $ (fromIntegral o :: Rational) * (q % (p + q))
-          where f = rationalToGHC (twoiMakerFeeRatio twoi)
-                p = numerator f
-                q = denominator f
-        getAmountTwo CompleteFill    = calcNet (orderAmount o)
-        getAmountTwo (PartialFill n) = calcNet (if isBuyOrder o then floor $ fromIntegral n * getPrice (orderPrice o) else n)
+    let getAmountPartial CompleteFill = orderAmount o
+        getAmountPartial (PartialFill n) = if isBuyOrder o then floor $ fromIntegral n * getPrice (orderPrice o) else n
+     in Left (poiRef poi, getAmountPartial ft)
+  f (OrderExecutionInfo ft o@OrderInfo {orderData = Just (DEXOrderDataTwoWay twoi)}) =
+    Right $
+      TWFillSpec
+        { twfsOrderRef = (twoiRef twoi)
+        , twfsDirection = fromJust (orderDir o)
+        , twfsAmount = getAmountTwo ft
+        , twfsOracleCertificate = orderCert o
+        , twfsRecipient = recpAddr
+        }
+   where
+    calcNet o = ceiling $ (fromIntegral o :: Rational) * (q % (p + q))
+     where
+      f = rationalToGHC (twoiMakerFeeRatio twoi)
+      p = numerator f
+      q = denominator f
+    getAmountTwo CompleteFill = calcNet (orderAmount o)
+    getAmountTwo (PartialFill n) = calcNet (if isBuyOrder o then floor $ fromIntegral n * getPrice (orderPrice o) else n)
   f _ = error "DEX order data not found"
 
 matchExecutionInfoUtxoRef :: MatchExecutionInfo -> GYTxOutRef
