@@ -110,16 +110,16 @@ library common
   visibility: public
   hs-source-dirs: lib-common
   build-depends:
+    base16-bytestring,
     cardano-api,
     geniusyield-dex-api,
     postgresql-simple,
     postgresql-simple-url,
-    req,
-    base16-bytestring
+    req
 
   exposed-modules:
-    GeniusYield.OrderBot.Types
     GeniusYield.OrderBot.Oracle
+    GeniusYield.OrderBot.Types
 
   ghc-options:
     -O2
