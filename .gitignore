@@ -30,3 +30,6 @@ config-files/*
 tags
 TAGS
 config-core.json
+keygen
+launch
+log

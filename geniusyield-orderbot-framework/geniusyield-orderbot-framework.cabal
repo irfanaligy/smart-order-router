@@ -34,6 +34,7 @@ common common-deps
     base,
     bytestring,
     containers,
+    pretty-simple,
     mtl,
     mwc-random,
     random,

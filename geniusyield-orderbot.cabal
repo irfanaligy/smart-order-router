@@ -45,6 +45,7 @@ common common-deps
     containers,
     mtl,
     mwc-random,
+    pretty-simple,
     random,
     random-fu,
     serialise,

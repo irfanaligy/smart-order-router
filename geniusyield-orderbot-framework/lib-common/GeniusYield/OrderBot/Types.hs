@@ -8,6 +8,8 @@ Stability   : develop
 module GeniusYield.OrderBot.Types (
   DEXOrderData (..),
   OrderInfo (..),
+  ppOrderInfo,
+  ppOrderData,
   SomeOrderInfo (SomeOrderInfo),
   OrderAssetPair (OAssetPair, currencyAsset, commodityAsset),
   OrderType (..),
@@ -30,6 +32,8 @@ module GeniusYield.OrderBot.Types (
   extractPriceFromCert,
 ) where
 
+import Text.Pretty.Simple (pPrint)
+import Control.Monad.IO.Class
 import Data.Aeson (ToJSON, (.=))
 import qualified Data.Aeson as Aeson
 import Data.Kind (Type)
@@ -86,6 +90,38 @@ data OrderInfo t = OrderInfo
   , orderDir :: !(Maybe TWFillDirection)
   }
   deriving stock (Eq, Show)
+
+ppOrderInfo :: MonadIO m => OrderInfo t -> m ()
+ppOrderInfo oi@OrderInfo{..} = do
+    liftIO $ putStrLn "-- BEGIN OrderInfo --"
+    pPrint orderType
+    pPrint orderAsset
+    pPrint orderVolume
+    pPrint orderAmount
+    pPrint orderPrice
+    pPrint orderDir
+    ppOrderData orderData
+    liftIO $ putStrLn "-- END OrderInfo --"
+
+ppOrderData :: MonadIO m => Maybe DEXOrderData -> m ()
+ppOrderData (Just (DEXOrderDataPartial poi)) = do
+  liftIO $ do
+    putStrLn ("< PO >")
+    putStrLn ("ref: "     <> show (poiRef poi))
+    putStrLn ("offered: " <> show (poiOfferedAsset poi))
+    putStrLn ("asked: "   <> show (poiAskedAsset poi))
+    putStrLn ("price: "   <> show (poiPrice poi))
+    putStrLn ("amount: "  <> show (poiOfferedAmount poi))
+ppOrderData (Just (DEXOrderDataTwoWay twoi)) = do
+  liftIO $ do
+    putStrLn ("< TWO >")
+    pPrint ("twoiRef: "                 <> show (twoiRef twoi))
+    print ("twoiTakerLovelaceFlatFee: " <> show (twoiTakerLovelaceFlatFee twoi))
+    print ("twoiTakerFeeRatio: "        <> show (twoiTakerFeeRatio twoi))
+    print ("twoiMakerFeeRatio: "        <> show (twoiMakerFeeRatio twoi))
+    pPrint (extractOrderAssets twoi)
+    pPrint (extractOrderPrices twoi)
+ppOrderData _ = error "failed to print order data"
 
 -- | Existential that can encapsulate both buy and sell orders.
 data SomeOrderInfo = forall t. SomeOrderInfo (OrderInfo t)

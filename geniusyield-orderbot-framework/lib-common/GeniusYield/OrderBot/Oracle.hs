@@ -89,7 +89,7 @@ instance Aeson.FromJSON OracleCertificateResponse where
 
 renderAssetClass :: GYAssetClass -> (Text, Text)
 renderAssetClass GYLovelace = ("", "")
-renderAssetClass (GYToken policyId (GYTokenName tokenName)) = (mintingPolicyIdToText policyId, decodeUtf8 tokenName)
+renderAssetClass (GYToken policyId tokenName) = (mintingPolicyIdToText policyId, tokenNameToHex tokenName)
 
 parseAssetClass :: (Text, Text) -> Maybe GYAssetClass
 parseAssetClass ("", "") = Just GYLovelace
