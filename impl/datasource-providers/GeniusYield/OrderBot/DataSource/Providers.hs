@@ -73,10 +73,9 @@ allOrderInfos c dex assetPairs = do
   twoWayOrderInfos <- runQuery c $ runReaderT (twoWayOrdersWithTransformerPredicate (dexTWORefs dex) (twoWayOrderFilter cTime)) (dexScripts dex)
   let m1 = foldl' f Map.empty partialOrderInfos
   m2 <- foldM g Map.empty twoWayOrderInfos
+  forM_ (Map.toList m2) (\(i, sois) -> (forM_ sois (\(SomeOrderInfo oi) -> print i >> ppOrderInfo oi)))
   return $ unionWith (++) m1 m2
  where
-  -- forM_ (toList (unionWith (++) m1 m2)) (\(i, sois) -> (forM_ sois (\(SomeOrderInfo oi) -> print i >> ppOrderInfo oi)))
-
   f m (partialOrderInfoToOrderInfo -> info@(SomeOrderInfo OrderInfo {orderAsset})) = Map.insertWith (++) orderAsset [info] m
   g m x = do
     twois <- twoWayOrderInfoToOrderInfo x

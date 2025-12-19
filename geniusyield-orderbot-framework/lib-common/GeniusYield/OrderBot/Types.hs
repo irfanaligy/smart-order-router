@@ -92,7 +92,7 @@ data OrderInfo t = OrderInfo
   deriving stock (Eq, Show)
 
 ppOrderInfo :: MonadIO m => OrderInfo t -> m ()
-ppOrderInfo oi@OrderInfo {..} = do
+ppOrderInfo OrderInfo {..} = do
   liftIO $ putStrLn "-- BEGIN OrderInfo --"
   pPrint orderType
   pPrint orderAsset

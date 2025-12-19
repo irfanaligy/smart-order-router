@@ -12,22 +12,22 @@ module GeniusYield.OrderBot.Oracle (OracleCertificate (..), Price (..), getOracl
 -- import Data.Char.ByteString.Char8 as BS
 -- import qualified Data.ByteString as BS
 
-import Control.Monad.IO.Class (liftIO)
+-- import Control.Monad.IO.Class (liftIO)
 import qualified Data.Aeson as Aeson
-import Data.Maybe (fromJust)
+-- import Data.Maybe (fromJust)
 import Data.Ratio ((%))
-import Data.Text (Text, pack, unpack)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text (Text, unpack)
+-- import Data.Text.Encoding (decodeUtf8)
 import Data.Time
-import Data.Time.Clock (UTCTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
+-- import Data.Time.Clock (UTCTime)
+-- import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Time.Format.ISO8601
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import GeniusYield.Api.Oracle (OracleCertificate (..), Price (..), SignatureOffchain (..))
 import GeniusYield.Types
-import GeniusYield.Types.Value (GYAssetClass (..))
-import Network.HTTP.Req (POST (..), ReqBodyJson (..), defaultHttpConfig, http, https, jsonResponse, port, req, responseBody, runReq, (/:))
+import GeniusYield.Types.Value ()
+import Network.HTTP.Req (POST (..), ReqBodyJson (..), defaultHttpConfig, http, jsonResponse, port, req, responseBody, runReq, (/:))
 
 parseTimestamp :: String -> Maybe UTCTime
 parseTimestamp = iso8601ParseM

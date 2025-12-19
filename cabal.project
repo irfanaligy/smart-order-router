@@ -19,8 +19,8 @@ index-state:
 
 packages: .
 packages: geniusyield-orderbot-framework
-packages: ../dex-contracts-api/geniusyield-dex-api
-packages: ../dex-contracts-api/geniusyield-dex-api/geniusyield-onchain/geniusyield-core-common
+-- packages: ../dex-contracts-api/geniusyield-dex-api
+-- packages: ../dex-contracts-api/geniusyield-dex-api/geniusyield-onchain/geniusyield-core-common
 
 -- TODO: Default value should be @direct@ in upcoming 3.10 version of cabal, omit this line then.
 test-show-details: direct
@@ -38,17 +38,16 @@ source-repository-package
   tag: b97614f2dbd98355acb7643fdd1a368cd13500b2
   --sha256: sha256-AncjJEbdoaf2PL9r7nAF7bfSdUWx05VuXVPzD2yqY50=
 
--- source-repository-package
---   type: git
---   -- location: https://github.com/geniusyield/dex-contracts-api
---   -- location: https://github.com/irfanaligy/dex-contracts-api
---   -- tag: a0078d25d2accb1698e2bd1b517dbfe1f635b76a
---   location: file:///home/irfan/work/dex-contracts-api
---   subdir:
---     geniusyield-dex-api
---     geniusyield-dex-api/geniusyield-onchain/geniusyield-core-common
---     geniusyield-orderbot-lib
---     -- geniusyield-server-lib
+source-repository-package
+  type: git
+  -- location: https://github.com/geniusyield/dex-contracts-api
+  location: https://github.com/irfanaligy/dex-contracts-api
+  tag: aabca507ea55c735d3fcf6044623469c1fdf8398
+  subdir:
+    geniusyield-dex-api
+    geniusyield-dex-api/geniusyield-onchain/geniusyield-core-common
+    geniusyield-orderbot-lib
+    geniusyield-server-lib
 
 ------- @atlas@ @cabal.project@ file
 
