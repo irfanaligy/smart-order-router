@@ -6,6 +6,7 @@ WORKDIR /SOR
 RUN cabal update
 COPY cabal.project ./
 COPY geniusyield-orderbot.cabal ./
+COPY geniusyield-annset/geniusyield-annset.cabal ./geniusyield-annset/
 COPY geniusyield-orderbot-framework/geniusyield-orderbot-framework.cabal geniusyield-orderbot-framework/
 
 RUN cabal update
