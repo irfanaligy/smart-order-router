@@ -21,7 +21,6 @@ cabal.project.local
 .HTF/
 .ghc.environment.*
 .DS_Store
-config-files/*
 *.skey
 *.vkey
 *.addr

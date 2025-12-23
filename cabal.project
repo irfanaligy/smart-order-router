@@ -19,6 +19,7 @@ index-state:
 
 packages: .
 packages: geniusyield-orderbot-framework
+packages: geniusyield-annset
 -- packages: ../dex-contracts-api/geniusyield-dex-api
 -- packages: ../dex-contracts-api/geniusyield-dex-api/geniusyield-onchain/geniusyield-core-common
 

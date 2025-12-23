@@ -33,14 +33,6 @@ genVolume min = do
   vh <- chooseInteger (min, 100000000)
   pure $ Volume (fromIntegral min) (fromIntegral vh)
 
-{- | Generator for the Volume. With a fixed minVolume of 34%.
-with an specified minimum and maximum.
--}
-genVolume' :: Integer -> Integer -> Gen Volume
-genVolume' min max = do
-  vh <- chooseInteger (ceiling $ (1 % min) * (34 % 100), max)
-  pure $ Volume (ceiling $ (vh % 1) * (34 % 100)) (fromIntegral vh)
-
 -- | Generates a random price between 1/100 and 100
 genPrice :: Gen Price
 genPrice = do
@@ -53,14 +45,15 @@ genBuyOrder :: OrderAssetPair -> Gen (OrderInfo 'BuyOrder)
 genBuyOrder oap = do
   price <- genPrice
   volume <- genVolume (ceiling $ getPrice price)
-  -- utxoRef <- genGYTxOutRef
-  return $ OrderInfo SBuyOrder oap volume 0 price Nothing Nothing Nothing
+  utxoRef <- genGYTxOutRef
+  return $ OrderInfo SBuyOrder utxoRef oap volume 0 price Nothing Nothing Nothing
 
 -- | Generator for a sell order, using all previous generators
 genSellOrder :: OrderAssetPair -> Gen (OrderInfo 'SellOrder)
 genSellOrder oap =
   OrderInfo
     <$> pure SSellOrder
+    <*> genGYTxOutRef
     <*> pure oap
     <*> genVolume 1
     <*> pure 0
@@ -82,14 +75,12 @@ shrinkTuple (oap, xs, ys) =
   [(oap, xs', ys) | xs' <- shrinkList shrinkOrderInfo xs]
     ++ [(oap, xs, ys') | ys' <- shrinkList shrinkOrderInfo ys]
 
--- | Shrinks an OrderInfo by shrinking it's volume
+-- | Shrinks an OrderInfo by shrinking it's volume.
 shrinkOrderInfo :: forall t. OrderInfo t -> [OrderInfo t]
 shrinkOrderInfo order =
   [order {orderVolume = vol'} | vol' <- shrinkVolume (orderVolume order)]
 
-{- | Shrinks a Volume by making sure the max is over the min.
-     The min is fixed, so no need to shrink it.
--}
+-- | Shrinks a Volume by making sure the max is over the min. The min is fixed, so no need to shrink it.
 shrinkVolume :: Volume -> [Volume]
 shrinkVolume v@Volume {volumeMin, volumeMax} =
   [v {volumeMax = vh'} | vh' <- shrinkIntegral volumeMax, vh' >= volumeMin]

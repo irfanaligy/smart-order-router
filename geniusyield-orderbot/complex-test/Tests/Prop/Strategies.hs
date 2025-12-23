@@ -5,7 +5,7 @@ import Data.Aeson (encode)
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Ratio
 import GeniusYield.OrderBot.MatchingStrategy
-import GeniusYield.OrderBot.OrderBook.List
+import GeniusYield.OrderBot.OrderBook.AnnSet
 import GeniusYield.OrderBot.Types
 import GeniusYield.Types
 import Test.QuickCheck
@@ -97,15 +97,16 @@ genOrderInfosWrongPrices = do
 
   genBuyOrder' :: OrderAssetPair -> Gen (OrderInfo 'BuyOrder)
   genBuyOrder' oap = do
-    orderPrice <- genPrice `suchThat` ((< (50 % 1)) . getPrice)
-    orderVolume <- genVolume (ceiling $ getPrice orderPrice)
-    -- utxoRef <- genGYTxOutRef
-    return $ OrderInfo SBuyOrder oap orderVolume 0 orderPrice Nothing Nothing Nothing
+    price <- genPrice `suchThat` ((< (50 % 1)) . getPrice)
+    volume <- genVolume (ceiling $ getPrice price)
+    utxoRef <- genGYTxOutRef
+    return $ OrderInfo SBuyOrder utxoRef oap volume 0 price Nothing Nothing Nothing
 
   genSellOrder' :: OrderAssetPair -> Gen (OrderInfo 'SellOrder)
   genSellOrder' oap =
     OrderInfo
       <$> pure SSellOrder
+      <*> genGYTxOutRef
       <*> pure oap
       <*> genVolume 1
       <*> pure 0

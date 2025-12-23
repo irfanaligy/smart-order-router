@@ -51,7 +51,7 @@ import GeniusYield.Api.DEX.TwoWayOrder (
   extractOrderPrices,
  )
 import GeniusYield.OrderBot.Oracle (OracleCertificate (..), Price (..), extractPriceFromCert, getOracleCertificate)
-import GeniusYield.Types (rationalToGHC)
+import GeniusYield.Types (GYTxOutRef, rationalToGHC)
 import GeniusYield.Types.Value (GYAssetClass (..))
 import Numeric.Natural (Natural)
 import Text.Pretty.Simple (pPrint)
@@ -81,9 +81,10 @@ data DEXOrderData
 type OrderInfo :: OrderType -> Type
 data OrderInfo t = OrderInfo
   { orderType :: !(SOrderType t) -- Buy or Sell
+  , orderRef :: !GYTxOutRef
   , orderAsset :: !OrderAssetPair -- assets offered and asked in order
   , orderVolume :: !Volume -- min/max volume of 'commodityAsset' being bought or sold
-  , orderAmount :: !Natural -- amount listed inside the order
+  , orderAmount :: Natural -- amount listed inside the order
   , orderPrice :: !Price -- price of each 'commodityAsset' expressed in terms of 'currencyAsset'
   , orderData :: !(Maybe DEXOrderData) -- full info of order to facilitate filling
   , orderCert :: !(Maybe OracleCertificate) -- price certificate to place order
@@ -157,6 +158,7 @@ The min volume is just the ceiling of the price, because that's the amount of
 commodity assets you would need to pay to access 1 of the offered currencyAssets.
 -}
 mkOrderInfo ::
+  GYTxOutRef ->
   -- | currency/commodity pair
   OrderAssetPair ->
   -- | asked asset
@@ -170,29 +172,32 @@ mkOrderInfo ::
   Maybe OracleCertificate ->
   (Maybe TWFillDirection) ->
   SomeOrderInfo
-mkOrderInfo oap askedAsset askedPrice offeredAmount dexOrderData mcert mdir = case orderType of
+mkOrderInfo ref oap askedAsset askedPrice offeredAmount dexOrderData mcert mdir = case orderType of
   BuyOrder ->
     let maxVolume = ceiling $ (toInteger offeredAmount % 1) * askedPrice
         minVolume = ceiling askedPrice
      in builder
           SBuyOrder
+          ref
           (Volume minVolume maxVolume)
           offeredAmount
           (Price (denominator askedPrice % numerator askedPrice))
   SellOrder ->
     builder
       SSellOrder
+      ref
       (Volume 1 offeredAmount)
       offeredAmount
       (Price askedPrice)
  where
   orderType = mkOrderType askedAsset oap
-  builder :: SOrderType t -> Volume -> Natural -> Price -> SomeOrderInfo
-  builder t vol amt price = SomeOrderInfo $ OrderInfo t oap vol amt price (Just dexOrderData) mcert mdir
+  builder :: SOrderType t -> GYTxOutRef -> Volume -> Natural -> Price -> SomeOrderInfo
+  builder t ref vol amt price = SomeOrderInfo $ OrderInfo t ref oap vol amt price (Just dexOrderData) mcert mdir
 
 mkOrderInfoPO :: OrderAssetPair -> PartialOrderInfo -> SomeOrderInfo
 mkOrderInfoPO oap poi@PartialOrderInfo {..} =
   mkOrderInfo
+    poiRef
     oap
     poiAskedAsset
     (rationalToGHC poiPrice)
@@ -222,6 +227,7 @@ mkOrderInfoTWO oap twoi = do
       pure . Left $ case opStraightPrice of
         FixedVal price ->
           mkOrderInfo
+            (twoiRef twoi)
             oap
             oaReverseAsset
             (rationalToGHC price)
@@ -231,6 +237,7 @@ mkOrderInfoTWO oap twoi = do
             (Just FillDirectionStraight)
         DynamicVal delta ->
           mkOrderInfo
+            (twoiRef twoi)
             oap
             oaReverseAsset
             (deltaToPrice currPrice delta)
@@ -251,8 +258,8 @@ mkOrderInfoTWO oap twoi = do
             (DynamicVal sd, Just (DynamicVal rd)) -> (deltaToPrice currStPrice sd, deltaToPrice currRevPrice rd)
             _ -> error "failed to produce OrderInfo from TwoWayOrder"
       pure . Right $
-        ( mkOrderInfo oap oaReverseAsset stPrice (fromIntegral oaStraightAmount) (DEXOrderDataTwoWay twoi) (Just certOne) (Just FillDirectionStraight)
-        , mkOrderInfo oap oaStraightAsset revPrice (fromIntegral oaReverseAmount) (DEXOrderDataTwoWay twoi) (Just certTwo) (Just FillDirectionReverse)
+        ( mkOrderInfo (twoiRef twoi) oap oaReverseAsset stPrice (fromIntegral oaStraightAmount) (DEXOrderDataTwoWay twoi) (Just certOne) (Just FillDirectionStraight)
+        , mkOrderInfo (twoiRef twoi) oap oaStraightAsset revPrice (fromIntegral oaReverseAmount) (DEXOrderDataTwoWay twoi) (Just certTwo) (Just FillDirectionReverse)
         )
 
 isSellOrder :: OrderInfo t -> Bool
